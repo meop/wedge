@@ -6,7 +6,11 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 fn shim(dir: &Path, script: &str) -> PathBuf {
-    let shim = dir.join("shimmed");
+    shim_named(dir, "shimmed", script)
+}
+
+fn shim_named(dir: &Path, name: &str, script: &str) -> PathBuf {
+    let shim = dir.join(name);
     let status = Command::new(env!("CARGO_BIN_EXE_mallet"))
         .args(["--source-path", "/bin/sh", "--target-path"])
         .arg(&shim)
@@ -159,4 +163,18 @@ fn a_shim_stamped_through_a_pointer_runs_what_the_pointer_names_now() {
     std::fs::write(&latest, "2").unwrap();
     assert_eq!(ran(&shim), "2\n");
     assert_eq!(std::fs::read(&shim).unwrap(), stamped, "the shim changed");
+}
+
+#[test]
+fn the_target_runs_under_the_shims_name_only_when_it_is_its_own() {
+    let dir = scratch("arg0");
+    let arg0 = |name: &str| {
+        let out = Command::new(shim_named(&dir, name, "ps -o args= -p $$; true"))
+            .output()
+            .unwrap();
+        let said = String::from_utf8(out.stdout).unwrap();
+        said.split_whitespace().next().unwrap().to_string()
+    };
+    assert_eq!(arg0("sh"), dir.join("sh").display().to_string());
+    assert_eq!(arg0("sh@5"), "/bin/sh");
 }

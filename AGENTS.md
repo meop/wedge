@@ -58,15 +58,16 @@ when that pin is bumped.
 
 ## Project structure
 
-- `src/lib.rs` — shim runtime: reads the embedded trailer and runs the target as a child it waits for
+- `src/lib.rs` — shim runtime: reads the embedded trailer and runs the target as a child it waits for, under the
+  shim's name when it is the target's
 - `src/pointer.rs` — pointer files: a regular file where a stamped path has a directory, naming it relative to its own
 - `src/data.rs` — binary trailer format (append/read the embedded path and arguments at end of exe), `%NAME%` expansion
 - `src/windows_pe.rs` — Windows PE subsystem detection (GUI vs Console)
-- `src/platform/` — platform dispatch for `spawn_target` and `alert` (unix: a child under the shim's argv[0], signals sent to
-  the shim passed on, ^C left to the target, the shim dying of the target's signal, and on Linux the target killed with
-  the shim; windows:
-  CreateProcessW with the shim's own first word and raw arguments as the command line, in a kill-on-close job the
-  target's children break away from, Ctrl+C left to the target, a GUI shim's errors in a message box)
+- `src/platform/` — platform dispatch for `spawn_target` and `alert` (unix: a child under the shim's argv[0] when it
+  names the target, signals sent to the shim passed on, ^C left to the target, the shim dying of the target's signal,
+  and on Linux the target killed with the shim; windows: CreateProcessW with the shim's own first word when it names
+  the target and raw arguments as the command line, in a kill-on-close job the target's children break away from,
+  Ctrl+C left to the target, a GUI shim's errors in a message box)
 - `src/bin/wedge.rs` — console shim entry point
 - `src/bin/wedge-gui.rs` — GUI subsystem shim entry point
 - `tests/windows.rs` — a shim stamped through a pointer on Windows

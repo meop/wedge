@@ -23,7 +23,8 @@ is not restamped.
 The target runs under the shim's name: whatever reads its command line (`ps`, Task Manager, a terminal multiplexer
 saving its session) sees the shim, as it would through a symlink, rather than the versioned path behind it, which a
 later upgrade may remove. The target's own path to itself (`/proc/self/exe`, `GetModuleFileName`) stays the real one,
-so a tool that finds its files from where it sits still finds them.
+so a tool that finds its files from where it sits still finds them. A shim named other than its target
+(`mise@2026.4.11` for `mise`) runs it under the target's path.
 
 `--arg <value>` (repeatable) stamps arguments the target always gets first, before the shim's own:
 `mallet --source-path pwsh.exe --target-path shell.exe --arg -nol` runs `pwsh.exe -nol <args>`.

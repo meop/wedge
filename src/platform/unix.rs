@@ -34,6 +34,7 @@ fn handle(signal: libc::c_int, handler: extern "C" fn(libc::c_int)) {
 pub fn spawn_target(
     target: &Path,
     stamped: &[OsString],
+    as_shim: bool,
 ) -> Result<u32, Box<dyn std::error::Error>> {
     for signal in PASSED {
         handle(signal, pass_on);
@@ -46,7 +47,7 @@ pub fn spawn_target(
     // the target runs under the shim's name, as through a symlink, so whatever reads its argv (ps, a terminal
     // multiplexer saving the session) sees `claude` rather than the versioned path behind it
     let mut own = std::env::args_os();
-    if let Some(arg0) = own.next() {
+    if let Some(arg0) = own.next().filter(|_| as_shim) {
         cmd.arg0(arg0);
     }
     cmd.args(stamped).args(own);

@@ -42,6 +42,7 @@ unsafe extern "system" fn leave_to_target(event: u32) -> i32 {
 pub fn spawn_target(
     target: &Path,
     stamped: &[OsString],
+    as_shim: bool,
 ) -> Result<u32, Box<dyn std::error::Error>> {
     // a handler routine, not SetConsoleCtrlHandler(NULL, TRUE): that would be inherited, and the target would ignore
     // Ctrl+C as well
@@ -49,7 +50,11 @@ pub fn spawn_target(
 
     let mut application = wide(target.as_os_str());
     application.push(0);
-    let mut command_line = command_line(&own_command_line(), stamped);
+    let mut command_line = command_line(
+        &own_command_line(),
+        (!as_shim).then_some(target.as_os_str()),
+        stamped,
+    );
     command_line.push(0);
 
     let std_handles = [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE].map(inheritable);
@@ -139,9 +144,13 @@ fn own_command_line() -> Vec<u16> {
     }
 }
 
-fn command_line(own: &[u16], stamped: &[OsString]) -> Vec<u16> {
+fn command_line(own: &[u16], target: Option<&OsStr>, stamped: &[OsString]) -> Vec<u16> {
     let (first, rest) = own.split_at(first_word_len(own));
-    let mut line = first.to_vec();
+    let mut line = Vec::new();
+    match target {
+        Some(target) => quote(target, &mut line),
+        None => line.extend_from_slice(first),
+    }
     for arg in stamped {
         line.push(b' ' as u16);
         quote(arg, &mut line);
@@ -222,7 +231,7 @@ mod tests {
     fn line(own: &str, stamped: &[&str]) -> String {
         let own = wide(OsStr::new(own));
         let stamped: Vec<OsString> = stamped.iter().map(OsString::from).collect();
-        OsString::from_wide(&command_line(&own, &stamped))
+        OsString::from_wide(&command_line(&own, None, &stamped))
             .into_string()
             .unwrap()
     }
@@ -240,6 +249,18 @@ mod tests {
         assert_eq!(
             line(r#""no closing quote"#, &["s"]),
             r#""no closing quote s"#
+        );
+    }
+
+    #[test]
+    fn a_shim_not_named_for_its_target_starts_it_as_the_target() {
+        let own = wide(OsStr::new(r#""C:\u\bin\mise@2026.4.11.exe" ls -c "a  b""#));
+        let target = OsStr::new(r"C:\x\mise@2026.4.11\2026.4.11\mise\bin\mise.exe");
+        assert_eq!(
+            OsString::from_wide(&command_line(&own, Some(target), &[]))
+                .into_string()
+                .unwrap(),
+            r#"C:\x\mise@2026.4.11\2026.4.11\mise\bin\mise.exe ls -c "a  b""#
         );
     }
 
