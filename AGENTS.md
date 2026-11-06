@@ -62,7 +62,8 @@ when that pin is bumped.
   shim's name when it is the target's
 - `src/pointer.rs` — pointer files: a regular file where a stamped path has a directory, naming it relative to its own
 - `src/data.rs` — binary trailer format (append/read the embedded path and arguments at end of exe), `%NAME%` expansion
-- `src/windows_pe.rs` — Windows PE subsystem detection (GUI vs Console)
+- `src/windows_pe.rs` — Windows PE subsystem detection (GUI vs Console), of the program an App Execution Alias starts
+  when the source is one (an MSIX package's command on PATH, which Windows will not open as a file)
 - `src/platform/` — platform dispatch for `spawn_target` and `alert` (unix: a child under the shim's argv[0] when it
   names the target, signals sent to the shim passed on, ^C left to the target, the shim dying of the target's signal,
   and on Linux the target killed with the shim; windows: CreateProcessW with the shim's own first word when it names

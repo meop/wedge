@@ -43,6 +43,8 @@ unset stays as written), so one machine-wide shim can run each user's own copy o
 `--source-path '%USERPROFILE%\.ghpm\bin\pwsh.exe'`.
 
 On Windows, `mallet` inspects the PE subsystem of the target to decide whether to use the console or GUI shim template.
+A target that is an App Execution Alias, as an MSIX package puts on `PATH` (winget's `pwsh`, `wt`), is read through to
+the program it starts.
 A GUI shim that cannot run its target says why in a message box. A batch file is not a target.
 
 ### Per platform
