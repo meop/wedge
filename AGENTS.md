@@ -34,7 +34,6 @@ All targets build natively — no cross-compilation tooling required.
 cargo build --release --target aarch64-unknown-linux-musl
 cargo build --release --target x86_64-unknown-linux-musl
 cargo build --release --target aarch64-apple-darwin
-cargo build --release --target x86_64-apple-darwin   # cross-compiled from macOS arm64
 cargo build --release --target aarch64-pc-windows-msvc
 cargo build --release --target x86_64-pc-windows-msvc
 ```
@@ -46,7 +45,8 @@ Add a target with `rustup target add <target>` before building for it.
 To cut a release: bump `version` in `Cargo.toml` and push to `main`.
 
 The CI pipeline (`.github/workflows/pipeline.yaml`) runs: Version check (skips
-the rest if `v<version>` already exists) → Validate (fmt + clippy) and Test (on Linux, macOS and Windows) →
+the rest if `v<version>` already exists) → Validate (fmt + clippy) and Test (`cargo test` for every
+release target, each on a runner of its own platform and architecture) →
 Build for every target → Publish, which signs `SHA256SUMS`, creates a
 GPG-signed tag `v<version>` and publishes the archives to a public GitHub
 release. Requires the `GPG_PRIVATE_KEY` and `GPG_PASSPHRASE` repository
@@ -71,14 +71,16 @@ when that pin is bumped.
   Ctrl+C left to the target, a GUI shim's errors in a message box)
 - `src/bin/wedge.rs` — console shim entry point
 - `src/bin/wedge-gui.rs` — GUI subsystem shim entry point
-- `tests/windows.rs` — a shim stamped through a pointer on Windows
-- `tests/unix.rs` — the unix runtime against a real stamped shim: parent, exit code, signals, ^C, a killed shim
+- `tests/windows.rs` — on Windows, a shim stamped through a pointer, a symlink, a junction or an App Execution Alias:
+  the template mallet picks for each, and the shim running it
+- `tests/unix.rs` — the unix runtime against a real stamped shim: parent, exit code, signals, ^C, a killed shim, and
+  a shim stamped through a pointer or a link, or to a dangling one
 - `src/bin/mallet.rs` — stamper tool: copies shim template and embeds target path, staged beside the shim and moved
   over it (on Windows a running shim is moved aside first, and the next stamp deletes it)
 
 ## Testing on a real host
 
-CI runs the tests on Linux, macOS and Windows. On a Windows machine of your own, run `cargo test` in its desktop
+CI runs the tests for every release target, on its own platform and architecture. On a Windows machine of your own, run `cargo test` in its desktop
 session, not an ssh login: rustup's `cargo` and `rustc` proxies cannot start in an ssh login (os error 448).
 
 ## Conventions

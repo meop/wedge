@@ -35,7 +35,8 @@ runs `~/.ghpm/extract/fzf/0.74.5/fzf`, and rewriting `latest` moves every shim s
 without stamping them again. A file that names no directory there is not a pointer. A pointer file is read the same by every process,
 elevated or not, where Windows does not let an elevated process follow a link a user made.
 
-A relative `--source-path` is made absolute from where `mallet` runs. `mallet` stamps the shim beside `--target-path` and
+A relative `--source-path` is made absolute from where `mallet` runs. A link in it (a symlink, or on Windows a
+junction) is kept as given, not resolved, so the shim runs whatever the link names when it runs. `mallet` stamps the shim beside `--target-path` and
 moves it into place, so it can replace a shim that is running, and nothing ever runs one half written.
 
 On Windows, `%NAME%` in the stamped path and arguments is the environment variable NAME when the shim runs (one left
@@ -44,7 +45,7 @@ unset stays as written), so one machine-wide shim can run each user's own copy o
 
 On Windows, `mallet` inspects the PE subsystem of the target to decide whether to use the console or GUI shim template.
 A target that is an App Execution Alias, as an MSIX package puts on `PATH` (winget's `pwsh`, `wt`), is read through to
-the program it starts.
+the program it starts. An alias whose program is gone, as Windows leaves some behind after an update, is not stamped.
 A GUI shim that cannot run its target says why in a message box. A batch file is not a target.
 
 ### Per platform
@@ -74,13 +75,14 @@ Produces `target/release/wedge`, `target/release/wedge-gui`, and `target/release
 
 ## Cross-compile
 
+Releases are built for Linux and Windows on x86_64 and arm64, and macOS on arm64.
+
 Add the target with `rustup target add <target>` then build:
 
 ```sh
 cargo build --release --target aarch64-unknown-linux-musl
 cargo build --release --target x86_64-unknown-linux-musl
 cargo build --release --target aarch64-apple-darwin
-cargo build --release --target x86_64-apple-darwin
 cargo build --release --target aarch64-pc-windows-msvc
 cargo build --release --target x86_64-pc-windows-msvc
 ```

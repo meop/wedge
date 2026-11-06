@@ -1,5 +1,6 @@
 #![cfg(unix)]
 
+use std::os::unix::fs::symlink;
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -19,6 +20,28 @@ fn shim_named(dir: &Path, name: &str, script: &str) -> PathBuf {
         .unwrap();
     assert!(status.success());
     shim
+}
+
+fn stamped(source: &Path, shim: &Path) -> PathBuf {
+    let status = Command::new(env!("CARGO_BIN_EXE_mallet"))
+        .arg("--source-path")
+        .arg(source)
+        .arg("--target-path")
+        .arg(shim)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    shim.to_path_buf()
+}
+
+fn tool(path: &Path, says: &str) {
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(path, format!("#!/bin/sh\necho {says}\n")).unwrap();
+    std::fs::set_permissions(path, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+}
+
+fn ran(shim: &Path) -> String {
+    String::from_utf8(Command::new(shim).output().unwrap().stdout).unwrap()
 }
 
 fn scratch(name: &str) -> PathBuf {
@@ -137,32 +160,60 @@ fn the_target_ends_with_a_shim_that_is_killed() {
 fn a_shim_stamped_through_a_pointer_runs_what_the_pointer_names_now() {
     let dir = scratch("pointer");
     for version in ["1", "2"] {
-        let bin = dir.join(version).join("tool");
-        std::fs::create_dir_all(bin.parent().unwrap()).unwrap();
-        std::fs::write(&bin, format!("#!/bin/sh\necho {version}\n")).unwrap();
-        std::fs::set_permissions(&bin, std::os::unix::fs::PermissionsExt::from_mode(0o755))
-            .unwrap();
+        tool(&dir.join(version).join("tool"), version);
     }
     let latest = dir.join("latest");
     std::fs::write(&latest, "1").unwrap();
-    let shim = dir.join("shimmed");
-    assert!(
-        Command::new(env!("CARGO_BIN_EXE_mallet"))
-            .args(["--source-path"])
-            .arg(latest.join("tool"))
-            .args(["--target-path"])
-            .arg(&shim)
-            .status()
-            .unwrap()
-            .success()
-    );
-    let stamped = std::fs::read(&shim).unwrap();
+    let shim = stamped(&latest.join("tool"), &dir.join("shimmed"));
+    let bytes = std::fs::read(&shim).unwrap();
 
-    let ran = |shim: &Path| String::from_utf8(Command::new(shim).output().unwrap().stdout).unwrap();
     assert_eq!(ran(&shim), "1\n");
     std::fs::write(&latest, "2").unwrap();
     assert_eq!(ran(&shim), "2\n");
-    assert_eq!(std::fs::read(&shim).unwrap(), stamped, "the shim changed");
+    assert_eq!(std::fs::read(&shim).unwrap(), bytes, "the shim changed");
+}
+
+#[test]
+fn a_shim_stamped_through_a_link_runs_what_the_link_names_now() {
+    let dir = scratch("link");
+    for version in ["1", "2"] {
+        tool(&dir.join(version).join("tool"), version);
+    }
+    let point = |version: &str| {
+        for link in ["tool", "latest"] {
+            let _ = std::fs::remove_file(dir.join(link));
+        }
+        symlink(format!("{version}/tool"), dir.join("tool")).unwrap();
+        symlink(version, dir.join("latest")).unwrap();
+    };
+    point("1");
+    let bin = dir.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    let shims = [
+        stamped(&dir.join("tool"), &bin.join("tool")),
+        stamped(&dir.join("tool"), &bin.join("renamed")),
+        stamped(&dir.join("latest").join("tool"), &bin.join("in-dir")),
+    ];
+
+    for shim in &shims {
+        assert_eq!(ran(shim), "1\n", "{}", shim.display());
+    }
+    point("2");
+    for shim in &shims {
+        assert_eq!(ran(shim), "2\n", "{}", shim.display());
+    }
+}
+
+#[test]
+fn a_shim_stamped_to_a_dangling_link_says_its_source_is_missing() {
+    let dir = scratch("dangling");
+    symlink("missing", dir.join("tool")).unwrap();
+    let shim = stamped(&dir.join("tool"), &dir.join("shimmed"));
+
+    let out = Command::new(&shim).output().unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    let said = String::from_utf8(out.stderr).unwrap();
+    assert!(said.contains("source not found"), "{said}");
 }
 
 #[test]

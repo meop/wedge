@@ -14,7 +14,16 @@ pub fn detect(path: &Path) -> io::Result<Subsystem> {
     match fs::File::open(path) {
         Ok(f) => detect_file(f),
         Err(e) if is_cant_access(&e) => match alias_target(path) {
-            Some(target) => detect_file(fs::File::open(target)?),
+            Some(target) => detect_file(fs::File::open(&target).map_err(|e| {
+                io::Error::new(
+                    e.kind(),
+                    format!(
+                        "{} is an alias for {}: {e}",
+                        path.display(),
+                        target.display()
+                    ),
+                )
+            })?),
             None => Err(e),
         },
         Err(e) => Err(e),
