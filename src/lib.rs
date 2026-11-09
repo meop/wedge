@@ -1,6 +1,8 @@
 pub mod data;
+pub mod macho;
 mod platform;
 pub mod pointer;
+pub mod sha256;
 pub mod windows_pe;
 
 pub fn run() -> ! {

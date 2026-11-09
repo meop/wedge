@@ -17,10 +17,18 @@ impl Trailer {
         Self::read_from(&std::env::current_exe().ok()?)
     }
 
+    /// the trailer at the end of the file, or, in a Mach-O mallet signed, right before the code signature
     pub fn read_from(path: &Path) -> Option<Self> {
         let mut f = fs::File::open(path).ok()?;
+        let file_len = f.seek(SeekFrom::End(0)).ok()?;
+        Self::read_ending_at(&mut f, file_len).or_else(|| {
+            let end = signature_offset(&mut f)?;
+            Self::read_ending_at(&mut f, end as u64)
+        })
+    }
 
-        f.seek(SeekFrom::End(-8)).ok()?;
+    fn read_ending_at(f: &mut fs::File, end: u64) -> Option<Self> {
+        f.seek(SeekFrom::Start(end.checked_sub(8)?)).ok()?;
         let mut tail = [0u8; 8];
         f.read_exact(&mut tail).ok()?;
 
@@ -28,14 +36,9 @@ impl Trailer {
         if magic != MAGIC && magic != MAGIC_ARGS {
             return None;
         }
-        let path_len = u32::from_le_bytes(tail[0..4].try_into().unwrap()) as i64;
-
-        let file_len = f.seek(SeekFrom::End(0)).ok()? as i64;
-        if path_len + 8 > file_len {
-            return None;
-        }
-
-        f.seek(SeekFrom::End(-8 - path_len)).ok()?;
+        let path_len = u32::from_le_bytes(tail[0..4].try_into().unwrap()) as u64;
+        f.seek(SeekFrom::Start(end.checked_sub(8 + path_len)?))
+            .ok()?;
         let mut buf = vec![0u8; path_len as usize];
         f.read_exact(&mut buf).ok()?;
 
@@ -90,6 +93,21 @@ impl Trailer {
         dest.write_all(magic)?;
         Ok(())
     }
+}
+
+/// where a Mach-O's code signature starts, read from its header and load commands
+fn signature_offset(f: &mut fs::File) -> Option<usize> {
+    f.seek(SeekFrom::Start(0)).ok()?;
+    let mut head = [0u8; 32];
+    f.read_exact(&mut head).ok()?;
+    if !crate::macho::is_macho(&head) {
+        return None;
+    }
+    let cmds_len = u32::from_le_bytes(head[20..24].try_into().unwrap()) as usize;
+    let mut header = head.to_vec();
+    header.resize(32 + cmds_len, 0);
+    f.read_exact(&mut header[32..]).ok()?;
+    crate::macho::code_signature_offset(&header)
 }
 
 /// `%NAME%` replaced by what `lookup` has for NAME; a name it has nothing for is left as written, as Windows'

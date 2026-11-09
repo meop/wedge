@@ -229,3 +229,66 @@ fn the_target_runs_under_the_shims_name_only_when_it_is_its_own() {
     assert_eq!(arg0("sh"), dir.join("sh").display().to_string());
     assert_eq!(arg0("sh@5"), "/bin/sh");
 }
+
+#[cfg(target_os = "macos")]
+fn macho_uuid(path: &Path) -> String {
+    let out = Command::new("dwarfdump")
+        .arg("--uuid")
+        .arg(path)
+        .output()
+        .unwrap();
+    let s = String::from_utf8(out.stdout).unwrap();
+    s.split_whitespace().nth(1).unwrap().to_string()
+}
+
+#[cfg(target_os = "macos")]
+fn uuid_text(u: [u8; 16]) -> String {
+    let h: String = u.iter().map(|b| format!("{b:02X}")).collect();
+    format!(
+        "{}-{}-{}-{}-{}",
+        &h[0..8],
+        &h[8..12],
+        &h[12..16],
+        &h[16..20],
+        &h[20..32]
+    )
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn each_shim_has_its_own_uuid_signed_ad_hoc_and_kept_at_every_restamp() {
+    let dir = scratch("identity");
+    let one = shim_named(&dir, "one", "echo one");
+    let two = shim_named(&dir, "two", "echo two");
+    let first = macho_uuid(&one);
+    assert_eq!(
+        first,
+        uuid_text(wedge::macho::uuid_for(&one.to_string_lossy()))
+    );
+    assert_ne!(first, macho_uuid(&two));
+    shim_named(&dir, "one", "echo again");
+    assert_eq!(macho_uuid(&one), first);
+    for shim in [&one, &two] {
+        let verify = Command::new("codesign")
+            .arg("-v")
+            .arg(shim)
+            .output()
+            .unwrap();
+        assert!(
+            verify.status.success(),
+            "{}",
+            String::from_utf8_lossy(&verify.stderr)
+        );
+        let info = Command::new("codesign")
+            .arg("-dv")
+            .arg(shim)
+            .output()
+            .unwrap();
+        let info = String::from_utf8_lossy(&info.stderr).to_string();
+        let name = shim.file_name().unwrap().to_string_lossy();
+        assert!(info.contains(&format!("Identifier={name}-")), "{info}");
+        assert!(info.contains("adhoc"), "{info}");
+    }
+    assert_eq!(ran(&one), "again\n");
+    assert_eq!(ran(&two), "two\n");
+}

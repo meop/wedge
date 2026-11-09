@@ -12,13 +12,18 @@ Shim executables that run a real binary from where it is unpacked, under their o
 
 ## How it works
 
-1. `mallet --source-path <target> --target-path <output>` copies the appropriate `wedge` template and appends the target path as a small binary trailer.
+1. `mallet --source-path <target> --target-path <output>` copies the appropriate `wedge` template and adds the target path as a small binary trailer: at the end of the file, or on macOS right before the code signature.
 2. When the output executable is run, it reads the trailer, resolves the target path, and runs it as a child it waits for — passing all arguments through.
 
 The shim never becomes the target, on any platform: it stays the process that was started, at the path it was stamped
 to, with the bytes it was stamped with. So what knows a program by its process — macOS's privacy permissions, a
-service manager, a firewall rule — keeps knowing the shim across upgrades of the target behind it, as long as the shim
-is not restamped.
+service manager, a firewall rule — keeps knowing the shim across upgrades of the target behind it.
+
+On macOS every shim has an identity of its own, derived from the path it is stamped to: a Mach-O UUID and a code
+signing identifier (`<name>-<hash>`) no other shim shares, the same at every restamp, from any wedge release. `mallet`
+signs the shim ad-hoc, as the linker signed the template, and the signature covers the trailer, so `codesign -v`
+accepts the shim. No certificate is involved. A new wedge release still changes the signed bytes, so what macOS keys
+on the signature's hashes may see a restamped shim as new.
 
 The target runs under the shim's name: whatever reads its command line (`ps`, Task Manager, a terminal multiplexer
 saving its session) sees the shim, as it would through a symlink, rather than the versioned path behind it, which a

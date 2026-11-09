@@ -49,16 +49,38 @@ fn stamp(
         .into_owned();
     let staged = target_path.with_file_name(format!(".{name}.{}.new", std::process::id()));
     let stamped = (|| -> Result<(), Box<dyn Error>> {
-        fs::copy(template, &staged)?;
-        let mut dest = fs::OpenOptions::new().append(true).open(&staged)?;
-        Trailer::append_to(source_path, stamped_args, &mut dest)?;
-        drop(dest);
+        let mut trailer = Vec::new();
+        Trailer::append_to(source_path, stamped_args, &mut trailer)?;
+        write_shim(template, &trailer, &staged, target_path, &name)?;
         replace(&staged, target_path, &name)
     })();
     if stamped.is_err() {
         let _ = fs::remove_file(&staged);
     }
     stamped
+}
+
+/// on macOS a Mach-O template gets an identity of its own, from where the shim lives: a UUID and a signing
+/// identifier no other shim has, the same at every restamp whatever wedge it comes from, and an ad-hoc signature, as
+/// the linker signed the template, that covers the trailer too. anything else is the template, byte for byte, with
+/// the trailer after it
+fn write_shim(
+    template: &Path,
+    trailer: &[u8],
+    staged: &Path,
+    target_path: &Path,
+    name: &str,
+) -> Result<(), Box<dyn Error>> {
+    let mut bytes = fs::read(template)?;
+    if cfg!(target_os = "macos") && wedge::macho::is_macho(&bytes) {
+        let key = std::path::absolute(target_path)?;
+        bytes = wedge::macho::restamp(&bytes, &key.to_string_lossy(), name, trailer)?;
+    } else {
+        bytes.extend_from_slice(trailer);
+    }
+    fs::write(staged, bytes)?;
+    fs::set_permissions(staged, fs::metadata(template)?.permissions())?;
+    Ok(())
 }
 
 fn replace(staged: &Path, target: &Path, name: &str) -> Result<(), Box<dyn Error>> {

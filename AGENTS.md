@@ -61,7 +61,12 @@ when that pin is bumped.
 - `src/lib.rs` — shim runtime: reads the embedded trailer and runs the target as a child it waits for, under the
   shim's name when it is the target's
 - `src/pointer.rs` — pointer files: a regular file where a stamped path has a directory, naming it relative to its own
-- `src/data.rs` — binary trailer format (append/read the embedded path and arguments at end of exe), `%NAME%` expansion
+- `src/data.rs` — binary trailer format (append/read the embedded path and arguments: at end of exe, or in a Mach-O
+  right before the code signature), `%NAME%` expansion
+- `src/macho.rs` — on macOS, a shim's own identity: the Mach-O UUID and signing identifier derived from its path, the
+  trailer placed before the code signature, and the ad-hoc signature (a CodeDirectory of SHA-256 page hashes) that
+  covers both
+- `src/sha256.rs` — SHA-256, for the code signature's page hashes and the derived UUID
 - `src/windows_pe.rs` — Windows PE subsystem detection (GUI vs Console), of the program an App Execution Alias starts
   when the source is one (an MSIX package's command on PATH, which Windows will not open as a file)
 - `src/platform/` — platform dispatch for `spawn_target` and `alert` (unix: a child under the shim's argv[0] when it
@@ -75,7 +80,8 @@ when that pin is bumped.
   the template mallet picks for each, and the shim running it
 - `tests/unix.rs` — the unix runtime against a real stamped shim: parent, exit code, signals, ^C, a killed shim, and
   a shim stamped through a pointer or a link, or to a dangling one
-- `src/bin/mallet.rs` — stamper tool: copies shim template and embeds target path, staged beside the shim and moved
+- `src/bin/mallet.rs` — stamper tool: copies shim template and embeds target path (on macOS, with the shim's own
+  identity and signature), staged beside the shim and moved
   over it (on Windows a running shim is moved aside first, and the next stamp deletes it)
 
 ## Testing on a real host
