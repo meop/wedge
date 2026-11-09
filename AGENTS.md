@@ -52,9 +52,10 @@ GPG-signed tag `v<version>` and publishes the archives to a public GitHub
 release. Requires the `GPG_PRIVATE_KEY` and `GPG_PASSPHRASE` repository
 secrets. Never create the tag by hand.
 
-ghpm and goup pin an exact wedge release, by the sha256 of its archives and
-of the binaries inside them (in golie). A new wedge release reaches them only
-when that pin is bumped.
+ghpm and goup take wedge's latest release, through golie, checked against the
+release's signed checksums when it is fetched. A new release reaches them at
+`ghpm pull` and `goup refresh`, and reaches a shim when it is stamped again
+(`ghpm renew`, `goup install --reinstall`).
 
 ## Project structure
 
